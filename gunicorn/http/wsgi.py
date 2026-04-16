@@ -170,7 +170,11 @@ def _make_early_hints_callback(req, sock, resp):
             if not TOKEN_RE.fullmatch(name):
                 raise InvalidHeaderName('%r' % name)
             if not HEADER_VALUE_RE.fullmatch(value):
-                raise InvalidHeader('%r' % value)
+                # Pass only the name — the invalid value may contain
+                # sensitive data that shouldn't cross security boundaries
+                # via exception propagation (browsers/proxies may forward
+                # it to untrusted parties).
+                raise InvalidHeader('%r' % name)
 
             value = value.strip(" \t")
             response += f"{name}: {value}\r\n".encode('latin-1')
