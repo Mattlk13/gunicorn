@@ -807,6 +807,10 @@ class Request(Message):
         if len(self.uri) == 0:
             raise InvalidRequestLine(bytes_to_str(line_bytes))
 
+        # RFC 9112 section 3.2.4: asterisk-form is only valid with OPTIONS.
+        if self.uri == "*" and self.method != "OPTIONS":
+            raise InvalidRequestLine(bytes_to_str(line_bytes))
+
         try:
             parts = split_request_uri(self.uri)
         except ValueError:
