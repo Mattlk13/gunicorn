@@ -7,5 +7,3 @@
 # Content-Length, Transfer-Encoding). Accepting them enables smuggling.
 from gunicorn.http.errors import InvalidHeaderName
 request = InvalidHeaderName
-# The C parser (gunicorn_h1c) does not yet enforce this rule.
-python_only = True

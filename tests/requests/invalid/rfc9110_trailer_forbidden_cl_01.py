@@ -6,4 +6,3 @@
 # smuggling vector; origin must reject.
 from gunicorn.http.errors import InvalidHeaderName
 request = InvalidHeaderName
-python_only = True

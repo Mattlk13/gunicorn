@@ -7,5 +7,3 @@
 # like "foo/bar" matches none of these and must be rejected.
 from gunicorn.http.errors import InvalidRequestLine
 request = InvalidRequestLine
-# The C parser (gunicorn_h1c) does not yet enforce this rule.
-python_only = True
