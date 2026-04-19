@@ -460,6 +460,13 @@ class PythonProtocol:
         if self.path == b'*' and self.method != b'OPTIONS':
             raise InvalidRequestLine("Invalid request line")
 
+        # RFC 9112 section 3.2.3: authority-form is only valid with CONNECT.
+        if (self.method != b'CONNECT'
+                and self.path != b'*'
+                and not self.path.startswith(b'/')
+                and b'://' not in self.path):
+            raise InvalidRequestLine("Invalid request line")
+
         # Parse version
         version = parts[2]
         if version == b'HTTP/1.1':
