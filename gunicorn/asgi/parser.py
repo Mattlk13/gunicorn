@@ -804,8 +804,11 @@ class PythonProtocol:
         return True
 
     def _has_invalid_header_chars(self, value):
-        """Check for NUL, CR, LF in header value."""
-        return b'\x00' in value or b'\r' in value or b'\n' in value
+        """RFC 9110 section 5.5: only VCHAR, SP, HTAB, and obs-text allowed."""
+        for c in value:
+            if c <= 0x08 or 0x0a <= c <= 0x1f or c == 0x7f:
+                return True
+        return False
 
 
 class CallbackRequest:
