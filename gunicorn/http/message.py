@@ -130,7 +130,10 @@ TOKEN_RE = re.compile(r"[%s0-9a-zA-Z]+" % (re.escape(RFC9110_5_6_2_TOKEN_SPECIAL
 METHOD_BADCHAR_RE = re.compile("[a-z#]")
 # usually 1.0 or 1.1 - RFC9112 permits restricting to single-digit versions
 VERSION_RE = re.compile(r"HTTP/(\d)\.(\d)")
-RFC9110_5_5_INVALID_AND_DANGEROUS = re.compile(r"[\0\r\n]")
+# RFC 9110 section 5.5: field-vchar = VCHAR / obs-text; SP and HTAB are the
+# only non-VCHAR bytes allowed in a field-value. Anything else in the
+# control range (0x00-0x1F except HTAB, plus DEL 0x7F) must be rejected.
+RFC9110_5_5_INVALID_AND_DANGEROUS = re.compile(r"[\x00-\x08\x0a-\x1f\x7f]")
 
 # RFC 9110 section 6.5.1: fields forbidden in trailers because they alter
 # routing, framing, or authentication. Using the uppercased names stored
