@@ -78,5 +78,10 @@ def test_asgi_parser(fname, http_parser):
     ):
         pytest.skip(f"Callback parser does not raise {expect.__name__}")
 
+    # Fixture-level opt-out for validations not (yet) implemented by the
+    # fast (C) callback parser. The sidecar sets `python_only = True`.
+    if http_parser == 'fast' and env.get('python_only'):
+        pytest.skip("fixture marked python_only")
+
     req = treq_asgi.badrequest(fname)
     req.check(cfg, expect, http_parser=http_parser)

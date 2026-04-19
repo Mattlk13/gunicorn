@@ -456,6 +456,10 @@ class PythonProtocol:
             if not self._is_valid_method(self.method):
                 raise InvalidRequestMethod(self.method.decode('latin-1'))
 
+        # RFC 9112 section 3.2.4: asterisk-form is only valid with OPTIONS.
+        if self.path == b'*' and self.method != b'OPTIONS':
+            raise InvalidRequestLine("Invalid request line")
+
         # Parse version
         version = parts[2]
         if version == b'HTTP/1.1':
