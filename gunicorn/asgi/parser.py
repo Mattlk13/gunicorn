@@ -29,6 +29,18 @@ class InvalidProxyHeader(ParseError):
 PP_V2_SIGNATURE = b"\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A"
 
 
+# RFC 9110 section 6.5.1: fields forbidden in trailers because they alter
+# routing, framing, or authentication.
+RFC9110_6_5_1_FORBIDDEN_TRAILER = frozenset((
+    b"host",
+    b"content-length",
+    b"transfer-encoding",
+    b"trailer",
+    b"authorization",
+    b"te",
+))
+
+
 class PPCommand(IntEnum):
     """PROXY protocol v2 commands."""
     LOCAL = 0x0
@@ -755,6 +767,14 @@ class PythonProtocol:
                     if self._on_message_complete:
                         self._on_message_complete()
                     return True
+
+                # RFC 9110 section 6.5.1: reject fields that must not appear
+                # in trailers.
+                colon = line.find(b':')
+                if colon > 0:
+                    name = line[:colon].strip(b' \t').lower()
+                    if name in RFC9110_6_5_1_FORBIDDEN_TRAILER:
+                        raise InvalidHeaderName(name.decode('latin-1'))
 
         return False
 

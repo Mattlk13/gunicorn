@@ -132,6 +132,18 @@ METHOD_BADCHAR_RE = re.compile("[a-z#]")
 VERSION_RE = re.compile(r"HTTP/(\d)\.(\d)")
 RFC9110_5_5_INVALID_AND_DANGEROUS = re.compile(r"[\0\r\n]")
 
+# RFC 9110 section 6.5.1: fields forbidden in trailers because they alter
+# routing, framing, or authentication. Using the uppercased names stored
+# by parse_headers.
+RFC9110_6_5_1_FORBIDDEN_TRAILER = frozenset((
+    "HOST",
+    "CONTENT-LENGTH",
+    "TRANSFER-ENCODING",
+    "TRAILER",
+    "AUTHORIZATION",
+    "TE",
+))
+
 
 def _ip_in_allow_list(ip_str, allow_list, networks):
     """Check if IP address is in the allow list.
@@ -234,6 +246,10 @@ class Message:
             # after we entered Unicode wonderland, 8bits could case-shift into ASCII:
             # b"\xDF".decode("latin-1").upper().encode("ascii") == b"SS"
             name = name.upper()
+
+            # RFC 9110 section 6.5.1
+            if from_trailer and name in RFC9110_6_5_1_FORBIDDEN_TRAILER:
+                raise InvalidHeaderName(name)
 
             value = [value.strip(" \t")]
 
