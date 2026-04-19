@@ -811,6 +811,15 @@ class Request(Message):
         if self.uri == "*" and self.method != "OPTIONS":
             raise InvalidRequestLine(bytes_to_str(line_bytes))
 
+        # RFC 9112 section 3.2.3: authority-form ("host:port") is only valid
+        # with CONNECT. origin-form starts with "/"; absolute-form contains
+        # "://". Anything else on a non-CONNECT request is authority-form.
+        if (self.method != "CONNECT"
+                and self.uri != "*"
+                and not self.uri.startswith("/")
+                and "://" not in self.uri):
+            raise InvalidRequestLine(bytes_to_str(line_bytes))
+
         try:
             parts = split_request_uri(self.uri)
         except ValueError:
