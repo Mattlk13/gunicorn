@@ -8,5 +8,3 @@
 # CL list variant.
 from gunicorn.http.errors import InvalidHeader
 request = InvalidHeader
-# The C parser (gunicorn_h1c) does not yet enforce this rule.
-python_only = True
