@@ -6,4 +6,3 @@
 # and must not be accepted.
 from gunicorn.http.errors import InvalidHeaderName
 request = InvalidHeaderName
-python_only = True

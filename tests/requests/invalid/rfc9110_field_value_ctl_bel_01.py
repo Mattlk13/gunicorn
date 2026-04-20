@@ -7,4 +7,3 @@
 # appear, to prevent log/response injection and parser confusion.
 from gunicorn.http.errors import InvalidHeader
 request = InvalidHeader
-python_only = True

@@ -6,4 +6,3 @@
 # it must not appear in a field-value.
 from gunicorn.http.errors import InvalidHeader
 request = InvalidHeader
-python_only = True
