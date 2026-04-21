@@ -361,7 +361,7 @@ requires-dist = [
     { name = "eventlet", marker = "extra == 'testing'", specifier = ">=0.40.3" },
     { name = "gevent", marker = "extra == 'gevent'", specifier = ">=24.10.1" },
     { name = "gevent", marker = "extra == 'testing'", specifier = ">=24.10.1" },
-    { name = "gunicorn-h1c", marker = "extra == 'fast'", specifier = ">=0.4.1" },
+    { name = "gunicorn-h1c", marker = "extra == 'fast'", specifier = ">=0.6.5" },
     { name = "h2", marker = "extra == 'http2'", specifier = ">=4.1.0" },
     { name = "h2", marker = "extra == 'testing'", specifier = ">=4.1.0" },
     { name = "httpx", extras = ["http2"], marker = "extra == 'testing'" },
@@ -377,11 +377,11 @@ provides-extras = ["gevent", "eventlet", "tornado", "gthread", "setproctitle", "
 
 [[package]]
 name = "gunicorn-h1c"
-version = "0.5.1"
+version = "0.6.5"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/27/a7/ed3b0bf1ced162a249ef86417a575aee68a56efe20faaa339afcd38b3afb/gunicorn_h1c-0.5.1.tar.gz", hash = "sha256:4f27d532b037039c41f8e6148d4314145c8b71b993ba0e64ff73e7a2ed7ea04a", size = 41544, upload-time = "2026-03-22T13:42:47.849Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/bd/448d9d94d028de687fe7b55be1c002f388d2f987211430e27e67a1fe510b/gunicorn_h1c-0.6.5.tar.gz", hash = "sha256:80f348f7f528f157af5bf357ed8d39fd6907efee573bf5be857d5808617e7c39", size = 49492, upload-time = "2026-04-20T05:26:50.522Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/04/9e/59e3f210152f219bad8e3c0118ad88c78e4f5b518fc066ff13e1743c849e/gunicorn_h1c-0.5.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:d5257c5f33eb1867d4a11a4b5cce90097ffe3088a574a80e1a37161b8e6019db", size = 71208, upload-time = "2026-03-22T13:42:46.473Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/f2/1f118e78e75a4770708894d5a99feba2467ac8b973924df202ff8c95c056/gunicorn_h1c-0.6.5-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:84fa8667a6557a03e21b2c02415a86bd00a98778436cea0ab2f737f1e22c872e", size = 80071, upload-time = "2026-04-20T05:26:49.167Z" },
 ]
 
 [[package]]
@@ -513,7 +513,7 @@ wheels = [
 
 [[package]]
 name = "pytest"
-version = "9.0.2"
+version = "9.0.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorama", marker = "sys_platform == 'win32'" },
@@ -524,9 +524,9 @@ dependencies = [
     { name = "pygments" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d1/db/7ef3487e0fb0049ddb5ce41d3a49c235bf9ad299b6a25d5780a89f19230f/pytest-9.0.2.tar.gz", hash = "sha256:75186651a92bd89611d1d9fc20f0b4345fd827c41ccd5c299a868a05d70edf11", size = 1568901, upload-time = "2025-12-06T21:30:51.014Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/0d/549bd94f1a0a402dc8cf64563a117c0f3765662e2e668477624baeec44d5/pytest-9.0.3.tar.gz", hash = "sha256:b86ada508af81d19edeb213c681b1d48246c1a91d304c6c81a427674c17eb91c", size = 1572165, upload-time = "2026-04-07T17:16:18.027Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3b/ab/b3226f0bd7cdcf710fbede2b3548584366da3b19b5021e74f5bde2a8fa3f/pytest-9.0.2-py3-none-any.whl", hash = "sha256:711ffd45bf766d5264d487b917733b453d917afd2b0ad65223959f59089f875b", size = 374801, upload-time = "2025-12-06T21:30:49.154Z" },
+    { url = "https://files.pythonhosted.org/packages/d4/24/a372aaf5c9b7208e7112038812994107bc65a84cd00e0354a88c2c77a617/pytest-9.0.3-py3-none-any.whl", hash = "sha256:2c5efc453d45394fdd706ade797c0a81091eccd1d6e4bccfcd476e2b8e0ab5d9", size = 375249, upload-time = "2026-04-07T17:16:16.13Z" },
 ]
 
 [[package]]
