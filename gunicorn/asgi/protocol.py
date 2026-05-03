@@ -488,16 +488,16 @@ class ASGIProtocol(asyncio.Protocol):
 
         # Create parser with callbacks and limit parameters (both parsers support them).
         # Only the Python parser implements PROXY protocol framing; pass the option there.
-        parser_kwargs = dict(
-            on_headers_complete=self._on_headers_complete,
-            on_body=self._on_body,
-            on_message_complete=self._on_message_complete,
-            limit_request_line=limit_request_line,
-            limit_request_fields=self.cfg.limit_request_fields,
-            limit_request_field_size=self.cfg.limit_request_field_size,
-            permit_unconventional_http_method=self.cfg.permit_unconventional_http_method,
-            permit_unconventional_http_version=self.cfg.permit_unconventional_http_version,
-        )
+        parser_kwargs = {
+            'on_headers_complete': self._on_headers_complete,
+            'on_body': self._on_body,
+            'on_message_complete': self._on_message_complete,
+            'limit_request_line': limit_request_line,
+            'limit_request_fields': self.cfg.limit_request_fields,
+            'limit_request_field_size': self.cfg.limit_request_field_size,
+            'permit_unconventional_http_method': self.cfg.permit_unconventional_http_method,
+            'permit_unconventional_http_version': self.cfg.permit_unconventional_http_version,
+        }
         if parser_class is PythonProtocol:
             parser_kwargs['proxy_protocol'] = getattr(self.cfg, 'proxy_protocol', 'off')
         self._callback_parser = parser_class(**parser_kwargs)

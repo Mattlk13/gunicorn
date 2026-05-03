@@ -297,13 +297,13 @@ def test_finish_body_returns_false_on_expired_deadline():
         b"\r\n"
         b"only-partial"
     )
+    import time as _time
+
     parser = _build_request_parser(payload)
     # Force an already-elapsed deadline; the drain must abandon immediately.
-    import time as _time
     expired = _time.monotonic() - 1.0
     # IterUnreader has no socket; deadline path is exercised only when sock
     # is present. Stub a sock with gettimeout/settimeout to drive the branch.
-    from unittest import mock
     sock = mock.Mock()
     sock.gettimeout.return_value = None
     parser.unreader.sock = sock
