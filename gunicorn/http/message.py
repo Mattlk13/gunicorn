@@ -206,26 +206,94 @@ class Message:
     def parse(self, unreader):
         raise NotImplementedError()
 
-    def parse_headers(self, data, from_trailer=False):
+    def _peer_trusted_for_forwarded(self):
+        """Return the (secure_scheme_headers, forwarder_headers) the peer is allowed to set.
+
+        When the peer's address is not in ``forwarded_allow_ips`` (or networks),
+        configured forwarding/secure-scheme policy must be ignored to prevent
+        spoofing.  Returns ``({}, [])`` when the peer is untrusted.
+        """
         cfg = self.cfg
+        if (not isinstance(self.peer_addr, tuple)
+                or _ip_in_allow_list(self.peer_addr[0], cfg.forwarded_allow_ips,
+                                     cfg.forwarded_allow_networks())):
+            return cfg.secure_scheme_headers, cfg.forwarder_headers
+        return {}, []
+
+    def _apply_header_policy(self, name, value, scheme_state,
+                             secure_scheme_headers, forwarder_headers,
+                             from_trailer=False):
+        """Apply per-header policy shared between Python and fast parsers.
+
+        Mutates ``self._expected_100_continue`` and ``self.scheme`` as needed.
+        ``scheme_state`` is a single-element list used as a mutable sentinel
+        so the caller can detect repeated scheme headers.
+
+        Returns the (name, value) pair to retain, or ``None`` to drop the
+        header (per ``header_map='drop'``).  Raises the same exceptions the
+        Python path raises so behavior is identical regardless of parser.
+        """
+        if not from_trailer and name == "EXPECT":
+            # https://datatracker.ietf.org/doc/html/rfc9110#section-10.1.1
+            # "The Expect field value is case-insensitive."
+            if value.lower() == "100-continue":
+                if self.version < (1, 1):
+                    # https://datatracker.ietf.org/doc/html/rfc9110#section-10.1.1-12
+                    # "A server that receives a 100-continue expectation
+                    #  in an HTTP/1.0 request MUST ignore that expectation."
+                    pass
+                else:
+                    self._expected_100_continue = True
+                # N.B. understood but ignored expect header does not return 417
+            else:
+                raise ExpectationFailed(value)
+
+        if name in secure_scheme_headers:
+            secure = value == secure_scheme_headers[name]
+            scheme = "https" if secure else "http"
+            if scheme_state[0]:
+                if scheme != self.scheme:
+                    raise InvalidSchemeHeaders()
+            else:
+                scheme_state[0] = True
+                self.scheme = scheme
+
+        # ambiguous mapping allows fooling downstream, e.g. merging non-identical headers:
+        # X-Forwarded-For: 2001:db8::ha:cc:ed
+        # X_Forwarded_For: 127.0.0.1,::1
+        # HTTP_X_FORWARDED_FOR = 2001:db8::ha:cc:ed,127.0.0.1,::1
+        # Only modify after fixing *ALL* header transformations; network to wsgi env
+        if "_" in name:
+            if name in forwarder_headers or "*" in forwarder_headers:
+                # This forwarder may override our environment
+                pass
+            elif self.cfg.header_map == "dangerous":
+                # as if we did not know we cannot safely map this
+                pass
+            elif self.cfg.header_map == "drop":
+                # almost as if it never had been there
+                # but still counts against resource limits
+                return None
+            else:
+                # fail-safe fallthrough: refuse
+                raise InvalidHeaderName(name)
+
+        return (name, value)
+
+    def parse_headers(self, data, from_trailer=False):
         headers = []
 
         # Split lines on \r\n
         lines = [bytes_to_str(line) for line in data.split(b"\r\n")]
 
         # handle scheme headers
-        scheme_header = False
-        secure_scheme_headers = {}
-        forwarder_headers = []
+        scheme_state = [False]
         if from_trailer:
             # nonsense. either a request is https from the beginning
             #  .. or we are just behind a proxy who does not remove conflicting trailers
-            pass
-        elif (not isinstance(self.peer_addr, tuple)
-              or _ip_in_allow_list(self.peer_addr[0], cfg.forwarded_allow_ips,
-                                   cfg.forwarded_allow_networks())):
-            secure_scheme_headers = cfg.secure_scheme_headers
-            forwarder_headers = cfg.forwarder_headers
+            secure_scheme_headers, forwarder_headers = {}, []
+        else:
+            secure_scheme_headers, forwarder_headers = self._peer_trusted_for_forwarded()
 
         # Parse headers into key/value pairs paying attention
         # to continuation lines.
@@ -275,52 +343,14 @@ class Message:
             if header_length > self.limit_request_field_size > 0:
                 raise LimitRequestHeaders("limit request headers fields size")
 
-            if not from_trailer and name == "EXPECT":
-                # https://datatracker.ietf.org/doc/html/rfc9110#section-10.1.1
-                # "The Expect field value is case-insensitive."
-                if value.lower() == "100-continue":
-                    if self.version < (1, 1):
-                        # https://datatracker.ietf.org/doc/html/rfc9110#section-10.1.1-12
-                        # "A server that receives a 100-continue expectation
-                        #  in an HTTP/1.0 request MUST ignore that expectation."
-                        pass
-                    else:
-                        self._expected_100_continue = True
-                    # N.B. understood but ignored expect header does not return 417
-                else:
-                    raise ExpectationFailed(value)
-
-            if name in secure_scheme_headers:
-                secure = value == secure_scheme_headers[name]
-                scheme = "https" if secure else "http"
-                if scheme_header:
-                    if scheme != self.scheme:
-                        raise InvalidSchemeHeaders()
-                else:
-                    scheme_header = True
-                    self.scheme = scheme
-
-            # ambiguous mapping allows fooling downstream, e.g. merging non-identical headers:
-            # X-Forwarded-For: 2001:db8::ha:cc:ed
-            # X_Forwarded_For: 127.0.0.1,::1
-            # HTTP_X_FORWARDED_FOR = 2001:db8::ha:cc:ed,127.0.0.1,::1
-            # Only modify after fixing *ALL* header transformations; network to wsgi env
-            if "_" in name:
-                if name in forwarder_headers or "*" in forwarder_headers:
-                    # This forwarder may override our environment
-                    pass
-                elif self.cfg.header_map == "dangerous":
-                    # as if we did not know we cannot safely map this
-                    pass
-                elif self.cfg.header_map == "drop":
-                    # almost as if it never had been there
-                    # but still counts against resource limits
-                    continue
-                else:
-                    # fail-safe fallthrough: refuse
-                    raise InvalidHeaderName(name)
-
-            headers.append((name, value))
+            kept = self._apply_header_policy(
+                name, value, scheme_state,
+                secure_scheme_headers, forwarder_headers,
+                from_trailer=from_trailer,
+            )
+            if kept is None:
+                continue
+            headers.append(kept)
 
         return headers
 
@@ -516,25 +546,23 @@ class Request(Message):
 
         # Headers - convert bytes to strings with uppercase names
         # gunicorn_h1c returns headers as (bytes, bytes) tuples
-        # Header name/value validation done by C parser
+        # Header name/value validation done by C parser; policy (Expect,
+        # secure_scheme_headers, forwarder trust gate, header_map) is enforced
+        # below so the fast path mirrors parse_headers().
         self.headers = []
+        scheme_state = [False]
+        secure_scheme_headers, forwarder_headers = self._peer_trusted_for_forwarded()
         for name_bytes, value_bytes in result['headers']:
             name = bytes_to_str(name_bytes).upper()
             value = bytes_to_str(value_bytes)
 
-            # Handle underscore in header names (policy decision, not validation)
-            if "_" in name:
-                forwarder_headers = self.cfg.forwarder_headers
-                if name in forwarder_headers or "*" in forwarder_headers:
-                    pass
-                elif self.cfg.header_map == "dangerous":
-                    pass
-                elif self.cfg.header_map == "drop":
-                    continue
-                else:
-                    raise InvalidHeaderName(name)
-
-            self.headers.append((name, value))
+            kept = self._apply_header_policy(
+                name, value, scheme_state,
+                secure_scheme_headers, forwarder_headers,
+            )
+            if kept is None:
+                continue
+            self.headers.append(kept)
 
         # Return remaining data after headers
         consumed = result['consumed']

@@ -582,6 +582,59 @@ class TestASGIProtocol:
         assert scope["root_path"] == "/api"
         assert scope["http_version"] == "1.1"
 
+    def test_effective_peername_no_proxy(self):
+        """Without PROXY framing the transport peername is returned as-is."""
+        from gunicorn.asgi.protocol import ASGIProtocol
+
+        worker = mock.Mock()
+        worker.cfg = Config()
+        worker.log = mock.Mock()
+        worker.asgi = mock.Mock()
+        protocol = ASGIProtocol(worker)
+        protocol._callback_parser = mock.Mock(proxy_protocol_info=None)
+
+        peer = ("10.0.0.1", 12345)
+        assert protocol._effective_peername(peer) == peer
+
+    def test_effective_peername_with_proxy(self):
+        """PROXY-supplied client address overrides the transport peername."""
+        from gunicorn.asgi.protocol import ASGIProtocol
+
+        worker = mock.Mock()
+        worker.cfg = Config()
+        worker.log = mock.Mock()
+        worker.asgi = mock.Mock()
+        protocol = ASGIProtocol(worker)
+        protocol._callback_parser = mock.Mock(proxy_protocol_info={
+            'proxy_protocol': 'TCP4',
+            'client_addr': '203.0.113.5',
+            'client_port': 56324,
+            'proxy_addr': '10.0.0.2',
+            'proxy_port': 443,
+        })
+
+        assert protocol._effective_peername(("10.0.0.1", 1)) == ("203.0.113.5", 56324)
+
+    def test_effective_peername_unknown_proxy(self):
+        """UNKNOWN PROXY framing has no client info; fall back to transport peername."""
+        from gunicorn.asgi.protocol import ASGIProtocol
+
+        worker = mock.Mock()
+        worker.cfg = Config()
+        worker.log = mock.Mock()
+        worker.asgi = mock.Mock()
+        protocol = ASGIProtocol(worker)
+        protocol._callback_parser = mock.Mock(proxy_protocol_info={
+            'proxy_protocol': 'UNKNOWN',
+            'client_addr': None,
+            'client_port': None,
+            'proxy_addr': None,
+            'proxy_port': None,
+        })
+
+        peer = ("10.0.0.1", 12345)
+        assert protocol._effective_peername(peer) == peer
+
 
 # ============================================================================
 # Config Tests
