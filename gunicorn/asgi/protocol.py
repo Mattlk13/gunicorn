@@ -512,7 +512,23 @@ class ASGIProtocol(asyncio.Protocol):
             'permit_unconventional_http_version': self.cfg.permit_unconventional_http_version,
         }
         if parser_class is PythonProtocol:
-            parser_kwargs['proxy_protocol'] = getattr(self.cfg, 'proxy_protocol', 'off')
+            # PROXY framing is only honored when the peer is in
+            # ``proxy_allow_ips`` (the WSGI parser enforces the same gate at
+            # gunicorn/http/message.py:proxy_protocol_access_check).  Untrusted
+            # peers get proxy_protocol='off', so any framing they send is
+            # interpreted as malformed HTTP and rejected with a 400.
+            cfg_proxy = getattr(self.cfg, 'proxy_protocol', 'off')
+            if cfg_proxy != 'off':
+                peername = self.transport.get_extra_info('peername')
+                normalized = _normalize_sockaddr(peername)
+                trusted = _check_trusted_proxy(
+                    normalized,
+                    self.cfg.proxy_allow_ips,
+                    self.cfg.proxy_allow_networks(),
+                )
+                parser_kwargs['proxy_protocol'] = cfg_proxy if trusted else 'off'
+            else:
+                parser_kwargs['proxy_protocol'] = 'off'
         self._callback_parser = parser_class(**parser_kwargs)
 
     def _on_headers_complete(self):
@@ -1286,9 +1302,19 @@ class ASGIProtocol(asyncio.Protocol):
         """Return the client address advertised via PROXY protocol if any.
 
         Falls back to the transport peername when PROXY protocol is disabled,
-        the framing was absent, or the parser is the C variant (which currently
-        does not surface PROXY metadata).
+        the framing was absent, the parser is the C variant (which currently
+        does not surface PROXY metadata), or the transport peer is not in
+        ``proxy_allow_ips`` (defense-in-depth: ``_setup_callback_parser``
+        already disables PROXY parsing for untrusted peers).
         """
+        if getattr(self.cfg, 'proxy_protocol', 'off') == 'off':
+            return peername
+        if not _check_trusted_proxy(
+            peername,
+            self.cfg.proxy_allow_ips,
+            self.cfg.proxy_allow_networks(),
+        ):
+            return peername
         parser = self._callback_parser
         info = getattr(parser, 'proxy_protocol_info', None) if parser else None
         if not info:

@@ -9,6 +9,7 @@ Provides callback-based parsing using either the fast C parser (gunicorn_h1c)
 or the pure Python PythonProtocol fallback.
 """
 
+import socket
 import struct
 from enum import IntEnum
 
@@ -319,9 +320,19 @@ class PythonProtocol:
             if len(parts) != 6:
                 raise InvalidProxyLine("Invalid PROXY v1 line for %s" % proto)
 
+            s_addr = parts[2]
+            d_addr = parts[3]
+
+            # Validate addresses with the appropriate family.  WSGI does the
+            # same in gunicorn/http/message.py:_parse_proxy_protocol_v1.
+            af = socket.AF_INET if proto == 'TCP4' else socket.AF_INET6
             try:
-                s_addr = parts[2]
-                d_addr = parts[3]
+                socket.inet_pton(af, s_addr)
+                socket.inet_pton(af, d_addr)
+            except (OSError, ValueError):
+                raise InvalidProxyLine("Invalid PROXY v1 %s address" % proto)
+
+            try:
                 s_port = int(parts[4])
                 d_port = int(parts[5])
             except ValueError as e:
@@ -391,6 +402,13 @@ class PythonProtocol:
         family = (fam_prot & 0xF0) >> 4
         protocol = fam_prot & 0x0F
 
+        # gunicorn is an HTTP server; only TCP (STREAM) makes sense.  WSGI
+        # rejects non-STREAM at gunicorn/http/message.py:_parse_proxy_protocol_v2.
+        if family in (PPFamily.INET, PPFamily.INET6) and protocol != PPProtocol.STREAM:
+            raise InvalidProxyHeader(
+                "PROXY v2: only TCP (STREAM) protocol is supported"
+            )
+
         if family == PPFamily.INET:
             # IPv4
             if len(addr_data) < 12:
@@ -399,7 +417,7 @@ class PythonProtocol:
             d_addr = '.'.join(str(b) for b in addr_data[4:8])
             s_port = struct.unpack('>H', addr_data[8:10])[0]
             d_port = struct.unpack('>H', addr_data[10:12])[0]
-            proto = 'TCP4' if protocol == PPProtocol.STREAM else 'UDP4'
+            proto = 'TCP4'
 
         elif family == PPFamily.INET6:
             # IPv6
@@ -412,7 +430,7 @@ class PythonProtocol:
             d_addr = ':'.join('%x' % w for w in d_words)
             s_port = struct.unpack('>H', addr_data[32:34])[0]
             d_port = struct.unpack('>H', addr_data[34:36])[0]
-            proto = 'TCP6' if protocol == PPProtocol.STREAM else 'UDP6'
+            proto = 'TCP6'
 
         elif family == PPFamily.UNSPEC:
             # Unspecified address family

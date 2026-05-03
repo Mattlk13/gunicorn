@@ -597,11 +597,15 @@ class TestASGIProtocol:
         assert protocol._effective_peername(peer) == peer
 
     def test_effective_peername_with_proxy(self):
-        """PROXY-supplied client address overrides the transport peername."""
+        """PROXY-supplied client address overrides the transport peername
+        when both proxy_protocol is enabled AND the peer is in
+        proxy_allow_ips (matches the WSGI gate)."""
         from gunicorn.asgi.protocol import ASGIProtocol
 
         worker = mock.Mock()
         worker.cfg = Config()
+        worker.cfg.set('proxy_protocol', True)
+        worker.cfg.set('proxy_allow_ips', '10.0.0.1')
         worker.log = mock.Mock()
         worker.asgi = mock.Mock()
         protocol = ASGIProtocol(worker)
@@ -614,6 +618,34 @@ class TestASGIProtocol:
         })
 
         assert protocol._effective_peername(("10.0.0.1", 1)) == ("203.0.113.5", 56324)
+
+    def test_effective_peername_untrusted_peer_ignored(self):
+        """A peer outside proxy_allow_ips MUST NOT be allowed to spoof its
+        client address via PROXY metadata, even if framing reached the
+        parser somehow.  Defense-in-depth for the trust gate that is
+        also enforced in _setup_callback_parser."""
+        from gunicorn.asgi.protocol import ASGIProtocol
+
+        worker = mock.Mock()
+        worker.cfg = Config()
+        worker.cfg.set('proxy_protocol', True)
+        worker.cfg.set('proxy_allow_ips', '10.0.0.1')
+        worker.log = mock.Mock()
+        worker.asgi = mock.Mock()
+        protocol = ASGIProtocol(worker)
+        protocol._callback_parser = mock.Mock(proxy_protocol_info={
+            'proxy_protocol': 'TCP4',
+            'client_addr': '203.0.113.99',
+            'client_port': 56324,
+            'proxy_addr': '198.51.100.1',
+            'proxy_port': 443,
+        })
+
+        # Peer is 198.51.100.1 (NOT in 10.0.0.1/32) — must fall back to
+        # the transport peername instead of trusting the spoofed PROXY
+        # metadata.
+        peer = ("198.51.100.1", 1234)
+        assert protocol._effective_peername(peer) == peer
 
     def test_effective_peername_unknown_proxy(self):
         """UNKNOWN PROXY framing has no client info; fall back to transport peername."""
