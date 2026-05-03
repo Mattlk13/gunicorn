@@ -905,6 +905,7 @@ class ASGIProtocol(asyncio.Protocol):
         response_complete = False
         exc_to_raise = None
         use_chunked = False
+        omits_body = False
 
         # Reset response buffer for write batching
         self._response_buffer = None
@@ -919,7 +920,7 @@ class ASGIProtocol(asyncio.Protocol):
 
         async def send(message):
             nonlocal response_started, response_complete, exc_to_raise
-            nonlocal response_status, response_headers, response_sent, use_chunked
+            nonlocal response_status, response_headers, response_sent, use_chunked, omits_body
 
             # If client disconnected, silently ignore send attempts
             # This allows apps to finish cleanup without errors
@@ -954,15 +955,26 @@ class ASGIProtocol(asyncio.Protocol):
                         has_transfer_encoding = True
                         use_chunked = True  # Framework already set chunked encoding
 
+                # RFC 9110 forbids a body for HEAD requests and for 1xx/204/304
+                # status codes.  When the framework supplied Content-Length or
+                # Transfer-Encoding for such a response, drop them and force
+                # plain framing so we never emit a chunked terminator or a
+                # framework-supplied body.
+                omits_body = self._response_omits_body(request.method, response_status)
+                if omits_body and (has_content_length or has_transfer_encoding):
+                    response_headers = self._strip_body_framing_headers(response_headers)
+                    has_content_length = False
+                    has_transfer_encoding = False
+                    use_chunked = False
+
                 # Use chunked encoding for HTTP/1.1 streaming responses without Content-Length.
-                # Skip when the response cannot carry a body (HEAD/1xx/204/304) or when
-                # Transfer-Encoding was already set by the framework.
-                is_no_body = self._response_omits_body(request.method, response_status)
+                # Skip when the response cannot carry a body or when Transfer-Encoding was
+                # already set by the framework.
                 needs_chunked = (
                     not has_content_length
                     and not has_transfer_encoding
                     and request.version >= (1, 1)
-                    and not is_no_body
+                    and not omits_body
                 )
                 if needs_chunked:
                     use_chunked = True
@@ -980,6 +992,13 @@ class ASGIProtocol(asyncio.Protocol):
 
                 body = message.get("body", b"")
                 more_body = message.get("more_body", False)
+
+                # RFC 9110: HEAD/1xx/204/304 responses must not carry a body,
+                # even if the framework emits one.  Drop body bytes silently;
+                # use_chunked has already been forced False above so no
+                # terminator will be written either.
+                if omits_body:
+                    body = b""
 
                 if body:
                     self._send_body(body, chunked=use_chunked)
@@ -1266,6 +1285,22 @@ class ASGIProtocol(asyncio.Protocol):
             or status in (204, 304)
             or 100 <= status < 200
         )
+
+    @staticmethod
+    def _strip_body_framing_headers(headers):
+        """Remove Content-Length and Transfer-Encoding from a header list.
+
+        Used when a response cannot carry a body (HEAD/1xx/204/304); RFC 9110
+        forbids a body and a framework-supplied framing header would either
+        mislead the peer about the response shape or leave us emitting a
+        chunked terminator the peer must not see.
+        """
+        forbidden = (b"content-length", "content-length",
+                     b"transfer-encoding", "transfer-encoding")
+        return [
+            (n, v) for n, v in headers
+            if (n.lower() if isinstance(n, str) else n.lower()) not in forbidden
+        ]
 
     def _send_body(self, body, chunked=False):
         """Send response body chunk.

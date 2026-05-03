@@ -381,6 +381,38 @@ class TestResponseOmitsBody:
         assert self._omits("GET", 404) is False
 
 
+class TestStripBodyFramingHeaders:
+    """Verify Content-Length and Transfer-Encoding are stripped for no-body
+    responses, regardless of header name casing or bytes/str typing."""
+
+    def _strip(self, headers):
+        from gunicorn.asgi.protocol import ASGIProtocol
+        return ASGIProtocol._strip_body_framing_headers(headers)
+
+    def test_strips_lowercase_bytes(self):
+        result = self._strip([
+            (b"content-type", b"text/plain"),
+            (b"content-length", b"5"),
+            (b"transfer-encoding", b"chunked"),
+        ])
+        assert result == [(b"content-type", b"text/plain")]
+
+    def test_strips_mixed_case_str(self):
+        result = self._strip([
+            ("Content-Type", "text/plain"),
+            ("Content-Length", "5"),
+            ("Transfer-Encoding", "chunked"),
+        ])
+        assert result == [("Content-Type", "text/plain")]
+
+    def test_preserves_unrelated_headers(self):
+        headers = [
+            (b"x-custom", b"value"),
+            (b"server", b"gunicorn"),
+        ]
+        assert self._strip(headers) == headers
+
+
 # ============================================================================
 # Streaming Response Message Sequence Tests
 # ============================================================================
