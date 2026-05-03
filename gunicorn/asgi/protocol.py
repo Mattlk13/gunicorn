@@ -906,6 +906,7 @@ class ASGIProtocol(asyncio.Protocol):
         exc_to_raise = None
         use_chunked = False
         omits_body = False
+        omits_body_warned = False
 
         # Reset response buffer for write batching
         self._response_buffer = None
@@ -921,6 +922,7 @@ class ASGIProtocol(asyncio.Protocol):
         async def send(message):
             nonlocal response_started, response_complete, exc_to_raise
             nonlocal response_status, response_headers, response_sent, use_chunked, omits_body
+            nonlocal omits_body_warned
 
             # If client disconnected, silently ignore send attempts
             # This allows apps to finish cleanup without errors
@@ -994,10 +996,19 @@ class ASGIProtocol(asyncio.Protocol):
                 more_body = message.get("more_body", False)
 
                 # RFC 9110: HEAD/1xx/204/304 responses must not carry a body,
-                # even if the framework emits one.  Drop body bytes silently;
+                # even if the framework emits one.  Drop body bytes;
                 # use_chunked has already been forced False above so no
-                # terminator will be written either.
+                # terminator will be written either.  Warn once per request
+                # so framework bugs surface in logs without spamming on
+                # multi-chunk streams.
                 if omits_body:
+                    if body and not omits_body_warned:
+                        self.log.warning(
+                            "ASGI app sent body bytes on a no-body response "
+                            "(method=%s status=%s); dropping per RFC 9110.",
+                            request.method, response_status,
+                        )
+                        omits_body_warned = True
                     body = b""
 
                 if body:
