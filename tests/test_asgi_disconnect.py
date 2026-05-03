@@ -204,3 +204,65 @@ class TestASGIDisconnectGracePeriod:
         from gunicorn.config import Config
         cfg = Config()
         assert cfg.asgi_disconnect_grace_period == 3
+
+
+class TestBodyReceiverIncompleteBody:
+    """Cover the receive() path when the request body never finishes framing."""
+
+    @pytest.fixture
+    def mock_worker(self):
+        worker = mock.Mock()
+        worker.nr_conns = 0
+        worker.loop = asyncio.new_event_loop()
+        worker.cfg = mock.Mock()
+        worker.cfg.asgi_disconnect_grace_period = 3
+        worker.cfg.timeout = 0.05  # tight bound for the test
+        worker.log = mock.Mock()
+        return worker
+
+    @pytest.mark.asyncio
+    async def test_receive_yields_disconnect_on_timeout(self, mock_worker):
+        """When _wait_for_data times out and the body is not complete, the
+        receiver MUST yield http.disconnect rather than synthesize a terminal
+        http.request with more_body=False — that would desync the next
+        pipelined request."""
+        from gunicorn.asgi.protocol import ASGIProtocol, BodyReceiver
+
+        protocol = ASGIProtocol(mock_worker)
+        protocol.reader = mock.Mock()
+
+        request = mock.Mock()
+        request.content_length = 100
+        request.chunked = False
+
+        receiver = BodyReceiver(request, protocol)
+        protocol._body_receiver = receiver
+
+        msg = await receiver.receive()
+        assert msg == {"type": "http.disconnect"}
+        assert receiver._closed is True
+
+    @pytest.mark.asyncio
+    async def test_receive_yields_terminal_request_when_complete(self, mock_worker):
+        """If the body is framed complete, the existing terminal http.request
+        with more_body=False must still be returned."""
+        from gunicorn.asgi.protocol import ASGIProtocol, BodyReceiver
+
+        protocol = ASGIProtocol(mock_worker)
+        protocol.reader = mock.Mock()
+
+        request = mock.Mock()
+        request.content_length = 5
+        request.chunked = False
+
+        receiver = BodyReceiver(request, protocol)
+        protocol._body_receiver = receiver
+
+        receiver.feed(b"hello")
+        receiver.set_complete()
+
+        msg = await receiver.receive()
+        assert msg["type"] == "http.request"
+        assert msg["body"] == b"hello"
+        # more_body may be False since the body is complete
+        assert msg["more_body"] is False

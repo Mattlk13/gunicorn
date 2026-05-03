@@ -478,9 +478,14 @@ class ThreadWorker(base.Worker):
             # Handle the request
             keepalive = self.handle_request(req, conn)
             if keepalive:
-                # Discard any unread request body before keepalive
-                # to prevent socket appearing readable due to leftover bytes
-                conn.parser.finish_body()
+                # Discard any unread request body before keepalive to prevent
+                # the socket from appearing readable due to leftover bytes.
+                # Bound the drain by the worker data timeout: a stalled client
+                # must not keep this thread blocked.
+                drain_deadline = time.monotonic() + DEFAULT_WORKER_DATA_TIMEOUT
+                if not conn.parser.finish_body(deadline=drain_deadline):
+                    # Abandon keepalive when the body could not be fully drained.
+                    return False
                 return True
         except http.errors.NoMoreData as e:
             self.log.debug("Ignored premature client disconnection. %s", e)

@@ -255,6 +255,62 @@ def test_invalid_http_version_error():
     assert str(InvalidHTTPVersion((2, 1))) == 'Invalid HTTP Version: (2, 1)'
 
 
+def _build_request_parser(payload):
+    """Construct a RequestParser that drains the given bytes."""
+    from gunicorn.config import Config
+    from gunicorn.http.parser import RequestParser
+
+    cfg = Config()
+    parser = RequestParser(cfg, iter([payload]), None)
+    next(iter(parser))
+    return parser
+
+
+def test_finish_body_drains_remainder():
+    payload = (
+        b"POST / HTTP/1.1\r\n"
+        b"Host: example.com\r\n"
+        b"Content-Length: 5\r\n"
+        b"\r\n"
+        b"hello"
+    )
+    parser = _build_request_parser(payload)
+    assert parser.finish_body() is True
+
+
+def test_finish_body_returns_false_when_byte_cap_exceeded():
+    body = b"x" * (4096)
+    payload = (
+        b"POST / HTTP/1.1\r\n"
+        b"Host: example.com\r\n"
+        b"Content-Length: %d\r\n\r\n%s" % (len(body), body)
+    )
+    parser = _build_request_parser(payload)
+    assert parser.finish_body(max_bytes=512) is False
+
+
+def test_finish_body_returns_false_on_expired_deadline():
+    payload = (
+        b"POST / HTTP/1.1\r\n"
+        b"Host: example.com\r\n"
+        b"Content-Length: 100\r\n"
+        b"\r\n"
+        b"only-partial"
+    )
+    parser = _build_request_parser(payload)
+    # Force an already-elapsed deadline; the drain must abandon immediately.
+    import time as _time
+    expired = _time.monotonic() - 1.0
+    # IterUnreader has no socket; deadline path is exercised only when sock
+    # is present. Stub a sock with gettimeout/settimeout to drive the branch.
+    from unittest import mock
+    sock = mock.Mock()
+    sock.gettimeout.return_value = None
+    parser.unreader.sock = sock
+    assert parser.finish_body(deadline=expired) is False
+    sock.settimeout.assert_called_with(None)
+
+
 def test_file_wrapper_iterable():
     """FileWrapper should support the iterator protocol per PEP 3333."""
     filelike = io.BytesIO(b"hello world")

@@ -345,6 +345,43 @@ class TestHTTPVersionForChunked:
 
 
 # ============================================================================
+# No-Body Response Tests (RFC 9110)
+# ============================================================================
+
+class TestResponseOmitsBody:
+    """Verify HEAD/1xx/204/304 are flagged as bodyless responses."""
+
+    def _omits(self, method, status):
+        from gunicorn.asgi.protocol import ASGIProtocol
+        return ASGIProtocol._response_omits_body(method, status)
+
+    def test_head_omits_body(self):
+        assert self._omits("HEAD", 200) is True
+        assert self._omits("HEAD", 500) is True
+
+    def test_204_omits_body(self):
+        assert self._omits("GET", 204) is True
+        assert self._omits("POST", 204) is True
+
+    def test_304_omits_body(self):
+        assert self._omits("GET", 304) is True
+
+    def test_informational_omits_body(self):
+        assert self._omits("GET", 100) is True
+        assert self._omits("GET", 103) is True
+        assert self._omits("GET", 199) is True
+
+    def test_get_200_has_body(self):
+        assert self._omits("GET", 200) is False
+
+    def test_post_200_has_body(self):
+        assert self._omits("POST", 200) is False
+
+    def test_404_has_body(self):
+        assert self._omits("GET", 404) is False
+
+
+# ============================================================================
 # Streaming Response Message Sequence Tests
 # ============================================================================
 
