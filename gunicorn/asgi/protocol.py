@@ -1078,9 +1078,11 @@ class ASGIProtocol(asyncio.Protocol):
                     response_status = 500
             return False
         finally:
-            # Clear the body receiver reference
-            self._body_receiver = None
-
+            # NOTE: do NOT clear self._body_receiver here.  _handle_connection
+            # reads it after this method returns to enforce the keepalive
+            # smuggling guard (refuse keepalive when the body was not framed
+            # complete).  The connection loop clears the reference itself
+            # after the gate has run.
             try:
                 request_time = _RequestTime(time.monotonic() - request_start)
                 # Only build log data if access logging is enabled
