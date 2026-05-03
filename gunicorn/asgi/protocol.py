@@ -166,8 +166,8 @@ class BodyReceiver:
     Uses Future-based waiting for efficient async receive().
     """
 
-    __slots__ = ('_chunks', '_complete', '_body_finished', '_closed', '_waiter',
-                 'request', 'protocol')
+    __slots__ = ('_chunks', '_complete', '_body_finished', '_closed',
+                 '_body_wait_expired', '_waiter', 'request', 'protocol')
 
     def __init__(self, request, protocol):
         self.request = request
@@ -175,7 +175,13 @@ class BodyReceiver:
         self._chunks = []
         self._complete = False
         self._body_finished = False  # True after returning more_body=False
+        # _closed means the client transport has gone away (signal_disconnect
+        # was called or the protocol detected a disconnect).  _body_wait_expired
+        # means the body did not finish framing within the configured timeout
+        # but the transport itself may still be open.  Both surface as
+        # http.disconnect to the app, but they are distinct conditions.
         self._closed = False
+        self._body_wait_expired = False
         self._waiter = None
 
     def feed(self, chunk):
@@ -190,9 +196,14 @@ class BodyReceiver:
         self._wake_waiter()
 
     def signal_disconnect(self):
-        """Signal that connection has been lost."""
+        """Signal that the client transport has gone away."""
         self._closed = True
         self._wake_waiter()
+
+    @property
+    def _disconnected(self):
+        """True when the receiver should yield http.disconnect to the app."""
+        return self._closed or self._body_wait_expired
 
     def _wake_waiter(self):
         """Wake up any pending receive() call."""
@@ -201,8 +212,8 @@ class BodyReceiver:
 
     async def receive(self):  # pylint: disable=too-many-return-statements
         """ASGI receive callable - returns body chunks or disconnect."""
-        # Already disconnected
-        if self._closed:
+        # Already disconnected (transport closed or body wait timed out)
+        if self._disconnected:
             return {"type": "http.disconnect"}
 
         # Body finished but not disconnected - wait for actual disconnect
@@ -248,7 +259,7 @@ class BodyReceiver:
 
     def _build_receive_result(self):
         """Build receive result after waiting for data."""
-        if self._closed:
+        if self._disconnected:
             return {"type": "http.disconnect"}
 
         if self._chunks:
@@ -259,14 +270,14 @@ class BodyReceiver:
             return {"type": "http.request", "body": b"", "more_body": False}
 
         # Wait returned without data and the message was not framed complete:
-        # treat as a client disconnect rather than synthesizing end-of-body
+        # treat as a body-wait expiry rather than synthesizing end-of-body
         # (which would desync the next pipelined request).
-        self._closed = True
+        self._body_wait_expired = True
         return {"type": "http.disconnect"}
 
     async def _wait_for_data(self):
         """Wait for body data to arrive via callback."""
-        if self._chunks or self._complete or self._closed:
+        if self._chunks or self._complete or self._disconnected:
             return
 
         # Create a new waiter
@@ -284,10 +295,12 @@ class BodyReceiver:
         try:
             await asyncio.wait_for(self._waiter, timeout=timeout)
         except asyncio.TimeoutError:
-            # No data arrived in time: mark the body receiver as disconnected
-            # so receive() yields http.disconnect rather than a fake terminal
-            # http.request with more_body=False.
-            self._closed = True
+            # No data arrived in time: mark body-wait as expired so receive()
+            # yields http.disconnect rather than a fake terminal http.request
+            # with more_body=False.  The transport itself may still be alive;
+            # _closed stays False so any code keying on transport-disconnect
+            # only is unaffected.
+            self._body_wait_expired = True
         finally:
             self._waiter = None
 
