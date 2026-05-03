@@ -35,7 +35,7 @@ class Parser:
     def __iter__(self):
         return self
 
-    def finish_body(self, deadline=None, max_bytes=_DRAIN_MAX_BYTES):
+    def finish_body(self, deadline=None, max_bytes=None):
         """Discard any unread body of the current message.
 
         Called before returning a keepalive connection to the poller so the
@@ -43,8 +43,12 @@ class Parser:
 
         ``deadline`` is an absolute ``time.monotonic()`` value; when set the
         socket read timeout is bounded by the remaining time before each read.
-        ``max_bytes`` caps the total drained bytes to defend against a slow
-        client that keeps trickling under the deadline.
+        ``max_bytes`` caps the total drained bytes; when a deadline is given
+        and ``max_bytes`` is left at the default, ``_DRAIN_MAX_BYTES`` applies
+        to defend against a slow client that keeps trickling under it.  When
+        called without a deadline (the default invocation from ``__next__``),
+        no byte cap is applied so the prior unbounded drain semantics are
+        preserved for callers that don't know how to react to a partial drain.
 
         Returns ``True`` when the body was fully drained, ``False`` when the
         drain was abandoned (deadline, byte cap, or socket timeout).  Callers
@@ -53,6 +57,9 @@ class Parser:
         """
         if not self.mesg:
             return True
+
+        if max_bytes is None and deadline is not None:
+            max_bytes = _DRAIN_MAX_BYTES
 
         sock = getattr(self.unreader, "sock", None)
         # gettimeout/settimeout only matter when bounding a real socket; a
@@ -82,7 +89,7 @@ class Parser:
                 if not data:
                     return True
                 drained += len(data)
-                if drained >= max_bytes:
+                if max_bytes is not None and drained >= max_bytes:
                     return False
         finally:
             if timeoutable_sock is not None:

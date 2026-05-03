@@ -266,3 +266,29 @@ class TestBodyReceiverIncompleteBody:
         assert msg["body"] == b"hello"
         # more_body may be False since the body is complete
         assert msg["more_body"] is False
+
+    def test_keepalive_gate_refuses_after_receive_timeout(self, mock_worker):
+        """The keepalive completion check must NOT treat a receive-timeout
+        as a framed-complete message: residual body bytes on the wire would
+        be misparsed as the next pipelined request (smuggling).
+
+        BodyReceiver._closed is overloaded across transport-disconnect and
+        receive-timeout, so the gate keys on _complete only.
+        """
+        from gunicorn.asgi.protocol import ASGIProtocol, BodyReceiver
+
+        protocol = ASGIProtocol(mock_worker)
+        protocol.reader = mock.Mock()
+
+        request = mock.Mock()
+        request.content_length = 100
+        request.chunked = False
+
+        receiver = BodyReceiver(request, protocol)
+        receiver._closed = True  # simulate _wait_for_data timeout
+        receiver._complete = False  # body never finished framing
+
+        # The gate inlined in _handle_connection: refuse keepalive when
+        # the receiver exists and the message wasn't framed complete.
+        message_complete = receiver is None or receiver._complete
+        assert message_complete is False

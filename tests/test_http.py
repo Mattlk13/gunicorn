@@ -289,6 +289,44 @@ def test_finish_body_returns_false_when_byte_cap_exceeded():
     assert parser.finish_body(max_bytes=512) is False
 
 
+def test_finish_body_no_cap_without_deadline():
+    """Without a deadline, finish_body MUST drain the full body even when it
+    exceeds _DRAIN_MAX_BYTES. The byte cap only applies under a deadline.
+
+    Regression: a 64 KiB cap on every call silently desynced base_async/sync
+    workers that iterate the parser via __next__ (which discards the return
+    value), leading to the next request being misparsed from residual body
+    bytes left on the wire.
+    """
+    body = b"x" * (128 * 1024)  # well over _DRAIN_MAX_BYTES
+    payload = (
+        b"POST / HTTP/1.1\r\n"
+        b"Host: example.com\r\n"
+        b"Content-Length: %d\r\n\r\n%s" % (len(body), body)
+    )
+    parser = _build_request_parser(payload)
+    assert parser.finish_body() is True
+
+
+def test_finish_body_applies_cap_only_under_deadline():
+    """When a deadline is set and max_bytes is left at the default, the
+    implicit _DRAIN_MAX_BYTES cap kicks in to defend against a slow client
+    trickling under the deadline."""
+    from gunicorn.http.parser import _DRAIN_MAX_BYTES
+
+    body = b"x" * (_DRAIN_MAX_BYTES + 1024)
+    payload = (
+        b"POST / HTTP/1.1\r\n"
+        b"Host: example.com\r\n"
+        b"Content-Length: %d\r\n\r\n%s" % (len(body), body)
+    )
+    import time as _time
+    far_future = _time.monotonic() + 60.0
+
+    parser = _build_request_parser(payload)
+    assert parser.finish_body(deadline=far_future) is False
+
+
 def test_finish_body_returns_false_on_expired_deadline():
     payload = (
         b"POST / HTTP/1.1\r\n"

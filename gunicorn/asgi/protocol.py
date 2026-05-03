@@ -782,15 +782,13 @@ class ASGIProtocol(asyncio.Protocol):
                     break
 
                 # Refuse keepalive if the previous request body was not fully
-                # framed: residual bytes left in the transport stream would be
-                # parsed as the start of the next request (smuggling).
+                # framed: residual bytes in the transport stream would be parsed
+                # as the start of the next request (smuggling).  Only _complete
+                # signals a cleanly framed message; _closed is set on transport
+                # disconnect *and* on receive timeout, neither of which means
+                # the body finished framing.
                 receiver = self._body_receiver
-                message_complete = (
-                    receiver is None
-                    or receiver._complete
-                    or receiver._closed
-                )
-                if not message_complete:
+                if receiver is not None and not receiver._complete:
                     break
 
                 # Resume reading if paused during body consumption
