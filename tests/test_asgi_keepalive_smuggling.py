@@ -17,6 +17,7 @@ gate can read it.  See the commit that added this test for the fix.
 """
 
 import asyncio
+import sys
 
 import pytest
 
@@ -83,12 +84,11 @@ class _Log:
         return False
 
 
-def _build_worker(loop, app):
+def _build_worker(loop, app, http_parser):
     cfg = Config()
     cfg.set('keepalive', 2)
     cfg.set('timeout', 30)
-    # Force the Python parser so the test does not depend on gunicorn_h1c.
-    cfg.set('http_parser', 'python')
+    cfg.set('http_parser', http_parser)
 
     class _W:
         pass
@@ -104,14 +104,29 @@ def _build_worker(loop, app):
     return w
 
 
+@pytest.fixture(params=["python", "fast"])
+def http_parser(request):
+    """Parametrize the smuggling test across both parser implementations."""
+    if request.param == "fast":
+        if hasattr(sys, "pypy_version_info"):
+            pytest.skip("gunicorn_h1c not supported on PyPy")
+        gunicorn_h1c = pytest.importorskip("gunicorn_h1c")
+        if not hasattr(gunicorn_h1c.H1CProtocol, "asgi_headers"):
+            pytest.skip("gunicorn_h1c >= 0.6.2 required")
+    return request.param
+
+
 @pytest.mark.asyncio
-async def test_keepalive_refused_when_first_body_is_partial():
+async def test_keepalive_refused_when_first_body_is_partial(http_parser):
     """Two pipelined requests on the same connection.  The first POST
     advertises Content-Length: 100 but the client only sends 10 body
     bytes.  The app returns 200 without consuming the body.  The
     transport MUST close instead of serving a second response from the
     residual bytes (which would be the second request the attacker
     pipelined behind the short body).
+
+    Run under both the Python parser and the C parser (gunicorn_h1c) so
+    the smuggling guard is verified end-to-end on every supported path.
     """
 
     async def app(scope, receive, send):
@@ -127,7 +142,7 @@ async def test_keepalive_refused_when_first_body_is_partial():
         })
 
     loop = asyncio.get_event_loop()
-    worker = _build_worker(loop, app)
+    worker = _build_worker(loop, app, http_parser)
     protocol = ASGIProtocol(worker)
     transport = _FakeTransport()
 
