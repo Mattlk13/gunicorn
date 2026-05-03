@@ -970,15 +970,18 @@ class ASGIProtocol(asyncio.Protocol):
                         has_transfer_encoding = True
                         use_chunked = True  # Framework already set chunked encoding
 
-                # RFC 9110 forbids a body for HEAD requests and for 1xx/204/304
-                # status codes.  When the framework supplied Content-Length or
-                # Transfer-Encoding for such a response, drop them and force
-                # plain framing so we never emit a chunked terminator or a
-                # framework-supplied body.
+                # No-body responses (HEAD/1xx/204/304) must not carry a body.
+                # Always drop Transfer-Encoding (no chunked terminator without
+                # a body); Content-Length is dropped only for statuses that
+                # forbid it per RFC 9110 §6.4.2 (1xx, 204).  HEAD and 304 keep
+                # an app-supplied Content-Length.
                 omits_body = self._response_omits_body(request.method, response_status)
                 if omits_body and (has_content_length or has_transfer_encoding):
-                    response_headers = self._strip_body_framing_headers(response_headers)
-                    has_content_length = False
+                    response_headers = self._strip_body_framing_headers(
+                        response_headers, response_status
+                    )
+                    if self._response_forbids_content_length(response_status):
+                        has_content_length = False
                     has_transfer_encoding = False
                     use_chunked = False
 
@@ -1313,16 +1316,25 @@ class ASGIProtocol(asyncio.Protocol):
         )
 
     @staticmethod
-    def _strip_body_framing_headers(headers):
-        """Remove Content-Length and Transfer-Encoding from a header list.
-
-        Used when a response cannot carry a body (HEAD/1xx/204/304); RFC 9110
-        forbids a body and a framework-supplied framing header would either
-        mislead the peer about the response shape or leave us emitting a
-        chunked terminator the peer must not see.
+    def _response_forbids_content_length(status):
+        """Per RFC 9110 §6.4.2 a server MUST NOT send Content-Length on 1xx
+        or 204 responses.  HEAD and 304 are NOT covered: HEAD MAY include the
+        Content-Length the same GET would have returned, and 304 MAY include
+        the Content-Length the unconditional response would have carried.
         """
-        forbidden = (b"content-length", "content-length",
-                     b"transfer-encoding", "transfer-encoding")
+        return status == 204 or 100 <= status < 200
+
+    @classmethod
+    def _strip_body_framing_headers(cls, headers, status):
+        """Remove framing headers that must not appear on a no-body response.
+
+        Transfer-Encoding is always stripped (chunked framing implies a body
+        we will not send).  Content-Length is stripped only when the status
+        forbids it (1xx / 204); HEAD and 304 keep app-supplied Content-Length.
+        """
+        forbidden = {b"transfer-encoding", "transfer-encoding"}
+        if cls._response_forbids_content_length(status):
+            forbidden.update({b"content-length", "content-length"})
         return [
             (n, v) for n, v in headers
             if (n.lower() if isinstance(n, str) else n.lower()) not in forbidden

@@ -382,35 +382,75 @@ class TestResponseOmitsBody:
 
 
 class TestStripBodyFramingHeaders:
-    """Verify Content-Length and Transfer-Encoding are stripped for no-body
-    responses, regardless of header name casing or bytes/str typing."""
+    """Verify the framing-header strip honours RFC 9110 §6.4.2:
+    Transfer-Encoding is always stripped on no-body responses; Content-Length
+    is stripped only when the status forbids it (1xx, 204), not for HEAD or 304.
+    """
 
-    def _strip(self, headers):
+    def _strip(self, headers, status):
         from gunicorn.asgi.protocol import ASGIProtocol
-        return ASGIProtocol._strip_body_framing_headers(headers)
+        return ASGIProtocol._strip_body_framing_headers(headers, status)
 
-    def test_strips_lowercase_bytes(self):
+    def test_204_strips_both_lowercase_bytes(self):
         result = self._strip([
             (b"content-type", b"text/plain"),
             (b"content-length", b"5"),
             (b"transfer-encoding", b"chunked"),
-        ])
+        ], 204)
         assert result == [(b"content-type", b"text/plain")]
 
-    def test_strips_mixed_case_str(self):
+    def test_103_strips_both_mixed_case_str(self):
         result = self._strip([
             ("Content-Type", "text/plain"),
             ("Content-Length", "5"),
             ("Transfer-Encoding", "chunked"),
-        ])
+        ], 103)
         assert result == [("Content-Type", "text/plain")]
 
+    def test_304_keeps_content_length_strips_te(self):
+        result = self._strip([
+            (b"etag", b"\"abc\""),
+            (b"content-length", b"42"),
+            (b"transfer-encoding", b"chunked"),
+        ], 304)
+        assert result == [(b"etag", b"\"abc\""), (b"content-length", b"42")]
+
+    def test_head_response_keeps_content_length_strips_te(self):
+        # The caller passes the response status; HEAD responses are detected
+        # via request.method, but the strip itself only sees status.  Verify
+        # a 200 status preserves Content-Length even though the strip is
+        # invoked for a HEAD request.
+        result = self._strip([
+            (b"content-length", b"1024"),
+            (b"transfer-encoding", b"chunked"),
+        ], 200)
+        assert result == [(b"content-length", b"1024")]
+
     def test_preserves_unrelated_headers(self):
-        headers = [
-            (b"x-custom", b"value"),
-            (b"server", b"gunicorn"),
-        ]
-        assert self._strip(headers) == headers
+        headers = [(b"x-custom", b"value"), (b"server", b"gunicorn")]
+        assert self._strip(headers, 204) == headers
+
+
+class TestResponseForbidsContentLength:
+    """Verify the 1xx/204 forbid-rule (RFC 9110 §6.4.2) is encoded correctly."""
+
+    def _forbids(self, status):
+        from gunicorn.asgi.protocol import ASGIProtocol
+        return ASGIProtocol._response_forbids_content_length(status)
+
+    def test_204(self):
+        assert self._forbids(204) is True
+
+    def test_1xx(self):
+        assert self._forbids(100) is True
+        assert self._forbids(103) is True
+        assert self._forbids(199) is True
+
+    def test_304_allowed(self):
+        assert self._forbids(304) is False
+
+    def test_200_allowed(self):
+        assert self._forbids(200) is False
 
 
 # ============================================================================
