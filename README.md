@@ -37,7 +37,7 @@ gunicorn myapp:app --worker-class asgi
 - **HTTP/2 support** (beta) with multiplexed streams
 - **Dirty Arbiters** (beta) for heavy workloads (ML models, long-running tasks)
 - uWSGI binary protocol for nginx integration
-- Multiple worker types: sync, gthread, gevent, eventlet, asgi
+- Multiple worker types: sync, gthread, gevent, asgi
 - Graceful worker process management
 - Compatible with Python 3.9+
 

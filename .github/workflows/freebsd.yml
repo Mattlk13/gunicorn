@@ -43,5 +43,4 @@ jobs:
             pip install pytest pytest-cov pytest-asyncio coverage
             pip install -e .
             pytest --cov=gunicorn -v tests/ \
-              --ignore=tests/workers/test_ggevent.py \
-              --ignore=tests/workers/test_geventlet.py
+              --ignore=tests/workers/test_ggevent.py
