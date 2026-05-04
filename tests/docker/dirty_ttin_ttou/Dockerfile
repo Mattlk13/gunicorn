@@ -6,9 +6,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install gunicorn from source
+# Install gunicorn from source.  setproctitle is required so dirty-arbiter
+# and dirty-worker processes get distinguishable names that the tests use
+# to count workers via pgrep.
 COPY . /gunicorn-src/
-RUN pip install --no-cache-dir /gunicorn-src/
+RUN pip install --no-cache-dir /gunicorn-src/ setproctitle
 
 # Copy test app
 COPY tests/docker/dirty_ttin_ttou/app.py /app/
