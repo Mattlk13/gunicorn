@@ -58,5 +58,5 @@ pytest test_per_app_e2e.py::TestPerAppAllocation::test_config_limited_app_uses_o
 
 ## Notes
 
-- Tests run on port 8001 to avoid conflicts with the existing dirty_arbiter tests on 8000
+- Tests run on port 28001 to avoid conflicts with the existing dirty_arbiter tests on 8000 and with macOS Docker alternatives that often reserve port 8001 (e.g., OrbStack's vcom-tunnel)
 - The container uses a keep-alive wrapper to allow testing worker crash scenarios

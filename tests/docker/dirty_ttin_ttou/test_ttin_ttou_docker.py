@@ -21,7 +21,10 @@ pytestmark = [
 # Directory containing this test file
 TEST_DIR = Path(__file__).parent
 COMPOSE_FILE = TEST_DIR / "docker-compose.yml"
-BASE_URL = "http://localhost:18000"
+# Use 127.0.0.1 (not "localhost") so we always hit IPv4. Docker Desktop /
+# OrbStack on macOS map host ports to IPv4 only, and ``localhost`` resolves
+# to ``::1`` on this host, which yields connection-reset noise.
+BASE_URL = "http://127.0.0.1:18000"
 
 
 @pytest.fixture(scope="module")
