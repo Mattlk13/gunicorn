@@ -94,7 +94,6 @@ pip install gunicorn[gevent,setproctitle]
 | `gunicorn[gevent]` | Gevent-based greenlet workers |
 | `gunicorn[gthread]` | Threaded workers |
 | `gunicorn[tornado]` | Tornado-based workers (not recommended) |
-| `gunicorn[eventlet]` | **Deprecated** - will be removed in 26.0 |
 
 See the [design docs](design.md) for guidance on choosing worker types.
 

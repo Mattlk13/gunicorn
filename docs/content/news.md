@@ -230,7 +230,7 @@
 
 ### Bug Fixes
 
-- Fix HTTP/2 ALPN negotiation for gevent and eventlet workers when
+- Fix HTTP/2 ALPN negotiation for the gevent worker when
   `do_handshake_on_connect` is False (the default). The TLS handshake is now
   explicitly performed before checking `selected_alpn_protocol()`.
 
@@ -250,11 +250,12 @@
 
 - Fix ASGI: quick shutdown on SIGINT/SIGQUIT, graceful on SIGTERM
 
-### Deprecations
+### Removals
 
-- **Eventlet Worker**: The `eventlet` worker is deprecated and will be removed in
-  Gunicorn 26.0. Eventlet itself is [no longer actively maintained](https://eventlet.readthedocs.io/en/latest/asyncio/migration.html).
-  Please migrate to `gevent`, `gthread`, or another supported worker type.
+- **Eventlet Worker**: The `eventlet` worker has been removed.  Eventlet itself
+  is [no longer actively maintained](https://eventlet.readthedocs.io/en/latest/asyncio/migration.html);
+  the worker was deprecated in 25.x and is now gone.  Migrate to `gevent`,
+  `gthread`, or one of the ASGI workers.
 
 ### Changes
 
@@ -329,7 +330,6 @@
 
 ### Security
 
-- **eventlet**: Require eventlet >= 0.40.3 (CVE-2021-21419, CVE-2025-58068)
 - **gevent**: Require gevent >= 24.10.1 (CVE-2023-41419, CVE-2024-3219)
 - **tornado**: Require tornado >= 6.5.0 (CVE-2025-47287)
 

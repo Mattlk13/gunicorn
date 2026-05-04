@@ -95,7 +95,6 @@ body:
         - sync (default)
         - gthread
         - gevent
-        - eventlet
         - tornado
         - asgi (beta)
         - custom

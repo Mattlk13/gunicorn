@@ -109,7 +109,6 @@ Not all workers support HTTP/2:
 | `sync` | No | Single-threaded, cannot multiplex streams |
 | `gthread` | Yes | Recommended for HTTP/2 |
 | `gevent` | Yes | Requires gevent |
-| `eventlet` | Yes | **Deprecated** - will be removed in 26.0 |
 | `asgi` | Yes | For async frameworks |
 | `tornado` | No | Tornado handles its own protocol |
 

@@ -95,23 +95,6 @@ Choose a worker type based on your application's needs.
     gunicorn myapp:app -k gevent --worker-connections 1000
     ```
 
-=== "Eventlet (Deprecated)"
-
-    !!! warning "Deprecated"
-        The eventlet worker is **deprecated** and will be removed in Gunicorn 26.0.
-        Eventlet itself is [no longer actively maintained](https://eventlet.readthedocs.io/en/latest/asyncio/migration.html).
-        Please migrate to `gevent`, `gthread`, or another supported worker type.
-
-    **Greenlet-based** async worker using [Eventlet](http://eventlet.net/).
-
-    - Similar capabilities to Gevent
-    - Handles high concurrency for I/O-bound apps
-    - Some libraries may need compatibility patches
-
-    ```bash
-    gunicorn myapp:app -k eventlet --worker-connections 1000
-    ```
-
 === "Tornado"
 
     Worker for [Tornado](https://www.tornadoweb.org/) applications.
@@ -132,7 +115,6 @@ Choose a worker type based on your application's needs.
 | `gthread` | Thread pool | ✅ | Mixed workloads, moderate concurrency |
 | ASGI workers | AsyncIO | ✅ | Modern async frameworks (FastAPI, etc.) |
 | `gevent` | Greenlets | ✅ | I/O-bound, WebSockets, streaming |
-| `eventlet` | Greenlets | ✅ | **Deprecated** - use `gevent` instead |
 | `tornado` | Tornado IOLoop | ✅ | Native Tornado applications |
 
 !!! tip "Quick Decision Guide"
