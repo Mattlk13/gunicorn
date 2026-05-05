@@ -15,8 +15,9 @@ Please target reports against :white_check_mark: or current master. Please under
 
 | Version | Status             |
 | ------- | ------------------ |
-| 25.0.0  | :white_check_mark: |
-| 24.1.1  | :white_check_mark: |
+| 26.0.0  | :white_check_mark: |
+| 25.3.0  | :white_check_mark: |
+| 24.1.1  | :x:                |
 | 23.0.0  | :x:                |
 | 22.0.0  | :x:                |
 | < 22.0  | :x:                |

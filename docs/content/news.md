@@ -1,6 +1,101 @@
 <span id="news"></span>
 # Changelog
 
+## 26.0.0 - 2026-05-05
+
+### Breaking Changes
+
+- **Eventlet worker removed**: The `eventlet` worker class has been dropped.
+  Migrate to `gevent`, `gthread`, or `tornado`.
+
+### New Features
+
+- **ASGI Framework Compatibility Suite**: New end-to-end compatibility test
+  harness covering Starlette, FastAPI, Litestar, Quart, Sanic, and BlackSheep.
+  Current grid passes 438/444 tests (98%).
+
+- **ASGI Test Suite Expansion**: 134 additional ASGI unit tests covering
+  protocol semantics, lifespan, websockets, and chunked framing.
+
+### Security
+
+- **HTTP/1.1 Request-Target Validation** (RFC 9112 sections 3.2.3, 3.2.4):
+  - Reject `authority-form` request-target outside `CONNECT`
+  - Reject `asterisk-form` request-target outside `OPTIONS`
+  - Reject `relative-reference` request-targets
+
+- **Header Field Hardening** (RFC 9110):
+  - Reject control characters in header field-value (section 5.5)
+  - Reject forbidden trailer field-names (section 6.5.1)
+  - Reject `Content-Length` list form (RFC 9112 section 6.3)
+
+- **Request Smuggling Hardening**:
+  - Tighten keepalive gate and scope `finish_body` byte cap
+  - Keep `_body_receiver` alive across the keepalive smuggling gate so
+    pipelined requests cannot re-enter a closed body
+  - Address parser/protocol findings from a six-point WSGI/ASGI audit
+
+- **PROXY Protocol (ASGI)**: Enforce `proxy_allow_ips` and tighten v1/v2
+  parsing in the ASGI callback parser.
+
+- **Connection Draining**: Drain the connection on close per RFC 9112
+  section 9.6 to prevent reset-on-close truncation.
+
+### Bug Fixes
+
+- **Body Framing on HEAD/204/304**:
+  - Keep `Content-Length` on HEAD and 304 responses
+    ([#3621](https://github.com/benoitc/gunicorn/pull/3621))
+  - Drop body framing on HEAD/204/304 even when the framework set it
+  - Warn once when an ASGI app emits a body for a no-body response
+
+- **HTTP/2 ASGI**:
+  - Fix `_handle_stream_ended` to set `_body_complete` in the async HTTP/2
+    handler so request bodies finalize correctly on stream end
+  - Add `InvalidChunkExtension` mapping and fast-parser support in ASGI
+    tests ([#3565](https://github.com/benoitc/gunicorn/pull/3565))
+
+- **HTTP/1.1 100-Continue**: Stop adding `Transfer-Encoding: chunked` to
+  100-Continue interim responses.
+
+- **WebSocket Close Handshake** (RFC 6455):
+  - Comply with the close handshake state machine
+  - Close the transport after the close handshake completes
+  - Fix binary send when the `text` key is `None`
+
+- **Early Hints**: Validate headers in the `early_hints` callback to match
+  `process_headers`; pass only the header name to `InvalidHeader`
+  ([#3588](https://github.com/benoitc/gunicorn/pull/3588)).
+
+- **ASGI Framework Fixes**:
+  - Fix ASGI disconnect handling for Django-style apps
+  - Fix Litestar request handling (use raw ASGI receive for body/headers)
+  - Fix Litestar HTTP endpoints for compatibility tests
+  - Fix Quart headers endpoint to normalize keys to lowercase
+  - Fix Quart WebSocket close test app (missing `accept()`)
+  - Fix duplicate `Transfer-Encoding` header for BlackSheep streaming
+
+### Refactoring
+
+- Split `BodyReceiver._closed` into separate transport and body-wait flags
+  for clearer keepalive/EOF semantics.
+
+### Changes
+
+- **Fast HTTP Parser**: Require `gunicorn_h1c >= 0.6.5`. Drop the last
+  `python_only` test markers; the C extension is now used wherever
+  available (CPython only; PyPy continues to use the Python parser).
+
+- **Test Dependencies**: Add `h2` and `uvloop` to the `testing` extra;
+  remove `eventlet`.
+
+- **Docker Build**: Bump GitHub Actions `docker/setup-qemu-action`,
+  `docker/setup-buildx-action`, `docker/login-action`,
+  `docker/build-push-action`, and `docker/metadata-action` to current
+  major versions.
+
+---
+
 ## 25.3.0 - 2026-03-26
 
 ### Bug Fixes
