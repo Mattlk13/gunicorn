@@ -371,3 +371,69 @@ def test_file_wrapper_iterable():
     wrapper2 = FileWrapper(filelike2, blksize=2)
     chunks = list(wrapper2)
     assert chunks == [b"ab", b"c"]
+
+
+def _make_response(method="GET", version=(1, 1)):
+    sock = mock.MagicMock()
+    req = mock.MagicMock()
+    req.method = method
+    req.version = version
+    req.should_close.return_value = False
+    cfg = mock.MagicMock()
+    cfg.is_ssl = False
+    cfg.sendfile = False
+    return Response(req, sock, cfg), sock
+
+
+@pytest.mark.parametrize("status,method,expect_cl", [
+    ("204 No Content", "GET", False),
+    ("100 Continue", "GET", False),
+    ("199 Custom", "GET", False),
+    ("304 Not Modified", "GET", True),
+    ("200 OK", "HEAD", True),
+])
+def test_no_body_response_strips_framing(status, method, expect_cl):
+    """1xx/204 strip Content-Length; HEAD/304 keep app-supplied Content-Length."""
+    resp, _ = _make_response(method=method)
+    body_len = 12
+    resp.start_response(status, [
+        ("Content-Type", "text/plain"),
+        ("Content-Length", str(body_len)),
+    ])
+    header_keys = [k.lower() for k, _ in resp.headers]
+    if expect_cl:
+        assert "content-length" in header_keys
+        assert resp.response_length == body_len
+    else:
+        assert "content-length" not in header_keys
+        assert resp.response_length is None
+    assert resp.chunked is False
+    assert resp._omits_body is True
+
+
+def test_no_body_response_drops_body_and_warns(caplog):
+    resp, sock = _make_response(method="GET")
+    resp.start_response("204 No Content", [
+        ("Content-Type", "text/plain"),
+        ("Content-Length", "5"),
+    ])
+    with caplog.at_level("WARNING", logger="gunicorn.http.wsgi"):
+        resp.write(b"hello")
+        resp.write(b"again")
+    assert resp.sent == 0
+    assert sum(
+        1 for r in caplog.records
+        if "no-body response" in r.getMessage()
+    ) == 1
+
+
+def test_normal_response_unaffected():
+    resp, _ = _make_response(method="GET")
+    resp.start_response("200 OK", [
+        ("Content-Type", "text/plain"),
+        ("Content-Length", "5"),
+    ])
+    assert resp._omits_body is False
+    assert resp.response_length == 5
+    resp.write(b"hello")
+    assert resp.sent == 5
