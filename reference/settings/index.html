@@ -3764,6 +3764,10 @@ http2-prior-knowledge.</p>
 </ul>
 <p>The mechanisms are listed separately on purpose: enabling one does not
 enable the other.</p>
+<p>With <code>prior-knowledge</code> alone, a trusted peer that does not send the
+preface is refused with 400, since it is expected to speak HTTP/2.
+With <code>upgrade</code> or <code>both</code> an HTTP/1 request is how an upgrade
+begins, so it is served normally.</p>
 <p>Only peers in <a href="#forwarded_allow_ips">forwarded-allow-ips</a> are considered. Everyone else
 is served HTTP/1.x exactly as if this were <code>off</code>. Anything else from
 a trusted peer on a prior-knowledge port (an HTTP/1.x request, a
@@ -4933,15 +4937,14 @@ need to increase this value.</p>
 <h3 id="http_parser"><code>http_parser</code><a class="headerlink" href="#http_parser" title="Permanent link">&para;</a></h3>
 <p><strong>Command line:</strong> <code>--http-parser STRING</code></p>
 <p><strong>Default:</strong> <code>'auto'</code></p>
-<p>HTTP parser implementation for ASGI workers.</p>
+<p>HTTP parser implementation.</p>
 <ul>
-<li>auto: Use H1CProtocol if gunicorn_h1c is available, else PythonProtocol (default)</li>
-<li>fast: Require H1CProtocol from gunicorn_h1c (fail if unavailable)</li>
-<li>python: Force pure Python PythonProtocol parser</li>
+<li>auto: Use gunicorn_h1c if it is available, else use the pure Python parser (default)</li>
+<li>fast: Require gunicorn_h1c (fail if unavailable)</li>
+<li>python: Force pure Python parser</li>
 </ul>
-<p>ASGI workers use callback-based parsing in data_received() for efficient
-incremental parsing. The gunicorn_h1c C extension provides significantly
-faster HTTP parsing using picohttpparser with SIMD optimizations.</p>
+<p>The gunicorn_h1c C extension provides significantly faster HTTP parsing
+using picohttpparser with SIMD optimizations.</p>
 <p>Install it with: pip install gunicorn[fast]</p>
 <div class="admonition info">
 <p class="admonition-title">Added in 25.0.0</p>
